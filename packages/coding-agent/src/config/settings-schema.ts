@@ -3326,43 +3326,6 @@ export const SETTINGS_SCHEMA = {
 
 	"git.token": { type: "string", default: undefined },
 
-	"git.cli": { type: "string", default: undefined },
-
-	"git.cache.enabled": {
-		type: "boolean",
-		default: true,
-		ui: {
-			tab: "tools",
-			group: "GitHub",
-			label: "Issue/PR Cache Enabled",
-			description:
-				"Cache rendered issue/PR view output in ~/.omp/cache/github-cache.db so repeated reads are free. Shared across all providers.",
-		},
-	},
-
-	"git.cache.softTtlSec": {
-		type: "number",
-		default: 300,
-		ui: {
-			tab: "tools",
-			group: "GitHub",
-			label: "Issue/PR Cache Soft TTL",
-			description:
-				"Within this window, cached issue/PR view rows are returned directly (seconds; default 5 minutes)",
-		},
-	},
-
-	"git.cache.hardTtlSec": {
-		type: "number",
-		default: 604800,
-		ui: {
-			tab: "tools",
-			group: "GitHub",
-			label: "Issue/PR Cache Hard TTL",
-			description:
-				"Past the soft TTL the cached row is returned and refreshed in the background; past the hard TTL it is dropped (seconds; default 7 days)",
-		},
-	},
 
 	"web_search.enabled": {
 		type: "boolean",

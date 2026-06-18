@@ -34,7 +34,7 @@ export function parseGitRemoteUrl(remoteUrl: string): GitRemoteInfo | null {
 	// e.g. https://github.com/owner/repo.git
 	const protocolMatch = url.match(/^(?:https?|git|ssh):\/\/(?:[^@]+@)?([^/]+)\/(.+)$/);
 	if (protocolMatch) {
-		const host = protocolMatch[1]!.toLowerCase();
+		const host = protocolMatch[1]!.toLowerCase().replace(/:\d+$/, "");
 		const path = protocolMatch[2]!.replace(/\.git$/, "").replace(/\/$/, "");
 		if (!path.includes("/")) return null;
 		return { host, repo: path };
@@ -44,7 +44,7 @@ export function parseGitRemoteUrl(remoteUrl: string): GitRemoteInfo | null {
 	// e.g. git@github.com:owner/repo.git
 	const scpMatch = url.match(/^[^@]+@([^:]+):(.+)$/);
 	if (scpMatch) {
-		const host = scpMatch[1]!.toLowerCase();
+		const host = scpMatch[1]!.toLowerCase().replace(/:\d+$/, "");
 		const path = scpMatch[2]!.replace(/\.git$/, "").replace(/\/$/, "");
 		if (!path.includes("/")) return null;
 		return { host, repo: path };

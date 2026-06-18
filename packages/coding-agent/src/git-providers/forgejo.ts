@@ -422,7 +422,7 @@ export function createForgejoProvider(settings: Settings | undefined): GitProvid
 			return {
 				rendered: text,
 				sourceUrl: undefined,
-				payload: { unified: "", files: parsed.files },
+				payload: { unified: text, files: parsed.files },
 				status: "miss",
 				fetchedAt,
 			};

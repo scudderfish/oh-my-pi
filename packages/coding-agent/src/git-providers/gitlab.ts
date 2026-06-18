@@ -38,6 +38,10 @@ function apiUrl(apiEndpoint: string): string {
 	return `${apiEndpoint}/api/v4`;
 }
 
+function projectPath(repo: string): string {
+	return encodeURIComponent(repo);
+}
+
 function authToken(settings: Settings | undefined): string | undefined {
 	return settings?.get("git.token") ?? process.env.GITLAB_TOKEN;
 }
@@ -324,7 +328,7 @@ export function createGitLabProvider(settings: Settings | undefined): GitProvide
 				return {
 					rendered: text,
 					sourceUrl: undefined,
-					payload: { unified: "", files: parsed.files },
+					payload: { unified: text, files: parsed.files },
 					status: "miss",
 					fetchedAt,
 				};
@@ -338,7 +342,7 @@ export function createGitLabProvider(settings: Settings | undefined): GitProvide
 				return {
 					rendered: unified,
 					sourceUrl: undefined,
-					payload: { unified: "", files: parsed.files },
+					payload: { unified, files: parsed.files },
 					status: "miss",
 					fetchedAt,
 				};

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added `git.provider` setting (github/gitlab/forgejo/bitbucket) to configure which git forge handles `issue://` and `pr://` URL resolution, with REST API backends for GitLab, Forgejo, and Bitbucket Cloud. ([#2951](https://github.com/can1357/oh-my-pi/issues/2951), [#2953](https://github.com/can1357/oh-my-pi/pull/2953))
+
 ## [16.0.6] - 2026-06-18
 
 ### Added

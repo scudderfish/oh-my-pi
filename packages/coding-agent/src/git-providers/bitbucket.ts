@@ -399,7 +399,7 @@ export function createBitbucketProvider(settings: Settings | undefined): GitProv
 			return {
 				rendered: text,
 				sourceUrl: undefined,
-				payload: { unified: "", files: parsed.files },
+				payload: { unified: text, files: parsed.files },
 				status: "miss",
 				fetchedAt,
 			};

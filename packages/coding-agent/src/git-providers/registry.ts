@@ -33,14 +33,14 @@ const providerCache = new WeakMap<Settings, GitProvider>();
  */
 export function providerFromSettings(settings: Settings | undefined): GitProvider {
 	if (!settings) {
-		return getOrCreateCached("github", settings);
+		return createProvider("github", undefined);
 	}
 
 	const cached = providerCache.get(settings);
 	if (cached) return cached;
 
 	const name: ProviderName = settings.get("git.provider") ?? "github";
-	const provider = getOrCreateCached(name, settings);
+	const provider = createProvider(name, settings);
 	providerCache.set(settings, provider);
 	return provider;
 }
@@ -51,20 +51,9 @@ export function resetProviderCache(): void {
 	// which creates a fresh object, naturally avoiding the memo.
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Module-level singleton cache per provider name
-// ────────────────────────────────────────────────────────────────────────────
-
-const moduleCache: Record<string, GitProvider> = {};
-
-function getOrCreateCached(name: ProviderName, settings: Settings | undefined): GitProvider {
-	const existing = moduleCache[name];
-	if (existing) return existing;
-
-	const provider = createProvider(name, settings);
-	moduleCache[name] = provider;
-	return provider;
-}
+// Provider construction — always creates fresh instances because each
+// Settings object may carry different git.host / git.token values.
+// Memoization is handled by the WeakMap<Settings, GitProvider> above.
 
 function createProvider(name: ProviderName, settings: Settings | undefined): GitProvider {
 	switch (name) {
