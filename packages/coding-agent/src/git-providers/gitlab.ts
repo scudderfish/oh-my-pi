@@ -251,7 +251,7 @@ export function createGitLabProvider(settings: Settings | undefined): GitProvide
 		async listIssues(repo: string, opts: ListOptions): Promise<IssueListItem[]> {
 			const pid = projectPath(repo);
 			const glState =
-				opts.state === "closed" ? "closed" : opts.state === "merged" ? "opened" : opts.state;
+				opts.state === "closed" ? "closed" : opts.state === "merged" ? "opened" : "opened";
 			const url = `${baseUrl}/projects/${pid}/issues?per_page=${opts.limit}&state=${glState}`;
 			const items = await apiGet<GlIssue[]>(url, token, opts.signal);
 			return items.map(i => ({
@@ -299,7 +299,7 @@ export function createGitLabProvider(settings: Settings | undefined): GitProvide
 		async listPrs(repo: string, opts: ListOptions): Promise<PrListItem[]> {
 			const pid = projectPath(repo);
 			const glState =
-				opts.state === "closed" ? "closed" : opts.state === "merged" ? "merged" : opts.state;
+				opts.state === "closed" ? "closed" : opts.state === "merged" ? "merged" : "opened";
 			const url = `${baseUrl}/projects/${pid}/merge_requests?per_page=${opts.limit}&state=${glState}`;
 			const items = await apiGet<GlMergeRequest[]>(url, token, opts.signal);
 			return items.map(mr => ({
