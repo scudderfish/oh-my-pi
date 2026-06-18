@@ -19,17 +19,10 @@
  */
 import type { Settings } from "../config/settings";
 import { AgentRegistry } from "../registry/agent-registry";
-import {
-	getOrFetchIssue,
-	getOrFetchPr,
-	getOrFetchPrDiff,
-	githubIssueJsonWithStateReasonFallback,
-	type PrDiffFile,
-	parsePositiveDecimalInt,
-	resolveDefaultRepoMemoized,
-} from "../tools/gh";
 import { type CacheStatus, formatFreshnessNote } from "../tools/github-cache";
-import * as git from "../utils/git";
+import { parsePositiveDecimalInt } from "../tools/gh";
+import { providerFromSettings } from "../git-providers/registry";
+import type { GitProvider, IssueListItem, ListOptions, PrDiffFile, PrListItem } from "../git-providers/provider";
 import type { InternalResource, InternalUrl, ProtocolHandler, ResolveContext } from "./types";
 
 type Scheme = "issue" | "pr";
@@ -241,8 +234,10 @@ async function resolveListRepo(
 ): Promise<string> {
 	if (parsedRepo) return parsedRepo;
 	const cwd = resolveCwd(context);
+	const settings = settingsFromContext(context);
+	const provider = providerFromSettings(settings);
 	try {
-		return await resolveDefaultRepoMemoized(cwd, context?.signal);
+		return await provider.resolveDefaultRepo(cwd, context?.signal);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
 		throw new Error(
@@ -251,35 +246,14 @@ async function resolveListRepo(
 	}
 }
 
-interface IssueListItem {
-	number?: number;
-	title?: string;
-	state?: string;
-	stateReason?: string | null;
-	author?: { login?: string } | null;
-	labels?: Array<{ name?: string }>;
-	createdAt?: string;
-	updatedAt?: string;
-	url?: string;
-}
-
-interface PrListItem extends IssueListItem {
-	isDraft?: boolean;
-	baseRefName?: string;
-	headRefName?: string;
-}
-
 function formatListItem(scheme: Scheme, repo: string, item: IssueListItem | PrListItem): string {
 	const number = item.number ?? "?";
 	const title = item.title ?? "(no title)";
 	const state = item.state?.toLowerCase() ?? "?";
-	const author = item.author?.login ?? "?";
+	const author = item.author ?? "?";
 	const updated = item.updatedAt ?? item.createdAt ?? "";
 	const draftSuffix = scheme === "pr" && (item as PrListItem).isDraft ? " [draft]" : "";
-	const labels = (item.labels ?? [])
-		.map(l => l.name)
-		.filter(Boolean)
-		.join(", ");
+	const labels = (item.labels ?? []).filter(Boolean).join(", ");
 	const labelSuffix = labels ? `  labels: ${labels}` : "";
 	const itemUrl = number === "?" ? `${scheme}://${repo}` : `${scheme}://${repo}/${number}`;
 	return `- [${state}${draftSuffix}] #${number}  @${author}  ${updated}\n    ${title}${labelSuffix}\n    ${itemUrl}`;
@@ -292,50 +266,18 @@ async function fetchAndRenderList(
 	context: ResolveContext | undefined,
 ): Promise<InternalResource> {
 	const repo = await resolveListRepo(scheme, options.repo, context);
-	const cwd = resolveCwd(context);
-	const fields =
-		scheme === "issue"
-			? ["number", "title", "state", "author", "labels", "createdAt", "updatedAt", "url"]
-			: [
-					"number",
-					"title",
-					"state",
-					"isDraft",
-					"author",
-					"baseRefName",
-					"headRefName",
-					"labels",
-					"createdAt",
-					"updatedAt",
-					"url",
-				];
-	const args = [
-		scheme,
-		"list",
-		"--repo",
-		repo,
-		"--state",
-		options.state,
-		"--limit",
-		String(options.limit),
-		"--json",
-		fields.join(","),
-	];
-	if (options.author) args.push("--author", options.author);
-	if (options.label) args.push("--label", options.label);
-
-	const items =
-		scheme === "issue"
-			? await githubIssueJsonWithStateReasonFallback<Array<IssueListItem>>(cwd, args, context?.signal, {
-					repoProvided: true,
-				})
-			: await git.github.json<Array<PrListItem>>(cwd, args, context?.signal, {
-					repoProvided: true,
-				});
-	const header =
-		scheme === "issue"
-			? `# Issues in ${repo} (${options.state}, up to ${options.limit})`
-			: `# Pull Requests in ${repo} (${options.state}, up to ${options.limit})`;
+	const settings = settingsFromContext(context);
+	const provider = providerFromSettings(settings);
+	const listOpts: ListOptions = {
+		state: options.state,
+		limit: options.limit,
+		author: options.author,
+		label: options.label,
+		signal: context?.signal,
+	};
+	const items = scheme === "issue" ? await provider.listIssues(repo, listOpts) : await provider.listPrs(repo, listOpts);
+	const label = scheme === "issue" ? "Issues" : provider.prLabel + "s";
+	const header = `# ${label} in ${repo} (${options.state}, up to ${options.limit})`;
 	const body =
 		items.length === 0 ? "_No matches._" : items.map(item => formatListItem(scheme, repo, item)).join("\n\n");
 	const footer = `\n\n---\nRead a specific item: \`${scheme}://${repo}/<N>\` (or \`${scheme}://<N>\` for the current repo).`;
@@ -379,7 +321,7 @@ function buildSingleResource({
 	}
 	const content =
 		status === "stale"
-			? `> WARNING: Live GitHub refresh failed; this ${scheme} content is cached and may be stale.\n\n${rendered}`
+			? `> WARNING: Live refresh failed; this ${scheme} content is cached and may be stale.\n\n${rendered}`
 			: rendered;
 	return {
 		url: url.href,
@@ -402,10 +344,12 @@ async function fetchAndRenderPrDiff(
 	context: ResolveContext | undefined,
 ): Promise<InternalResource> {
 	const cwd = resolveCwd(context);
+	const settings = settingsFromContext(context);
+	const provider = providerFromSettings(settings);
 	let repo = parsed.repo;
 	if (!repo) {
 		try {
-			repo = await resolveDefaultRepoMemoized(cwd, context?.signal);
+			repo = await provider.resolveDefaultRepo(cwd, context?.signal);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			throw new Error(
@@ -413,13 +357,7 @@ async function fetchAndRenderPrDiff(
 			);
 		}
 	}
-	const lookup = await getOrFetchPrDiff({
-		cwd,
-		repo,
-		number: parsed.number,
-		signal: context?.signal,
-		settings: settingsFromContext(context),
-	});
+	const lookup = await provider.fetchPrDiff(repo, parsed.number, context?.signal);
 	const files = lookup.payload.files;
 	const freshness = formatFreshnessNote(lookup.status, lookup.fetchedAt);
 
@@ -463,7 +401,7 @@ async function fetchAndRenderPrDiff(
 	}
 
 	// mode === "list"
-	const header = `# Pull Request Diff: ${repo}#${parsed.number} (${files.length} file${files.length === 1 ? "" : "s"})`;
+	const header = `# ${provider.prLabel} Diff: ${repo}#${parsed.number} (${files.length} file${files.length === 1 ? "" : "s"})`;
 	const body =
 		files.length === 0
 			? "_No file changes._"
@@ -505,13 +443,15 @@ export class IssueProtocolHandler implements ProtocolHandler {
 			throw new Error(`Invalid issue:// URL: unexpected variant '${parsed.kind}'`);
 		}
 		try {
-			const lookup = await getOrFetchIssue({
-				cwd: resolveCwd(context),
-				repo: parsed.repo,
-				issue: String(parsed.number),
+			const provider = providerFromSettings(settingsFromContext(context));
+			const cwd = resolveCwd(context);
+			let repo = parsed.repo;
+			if (!repo) {
+				repo = await provider.resolveDefaultRepo(cwd, context?.signal);
+			}
+			const lookup = await provider.fetchIssue(repo, parsed.number, {
 				includeComments: parsed.comments,
 				signal: context?.signal,
-				settings: settingsFromContext(context),
 			});
 			return buildSingleResource({
 				url,
@@ -556,26 +496,16 @@ export class PrProtocolHandler implements ProtocolHandler {
 				throw new Error(`pr:// diff resolution failed: ${message}`);
 			}
 		}
-		const cwd = resolveCwd(context);
-		let repo = parsed.repo;
-		if (!repo) {
-			try {
-				repo = await resolveDefaultRepoMemoized(cwd, context?.signal);
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
-				throw new Error(
-					`pr://${parsed.number} could not resolve a default repo from the current session: ${message}\nUse pr://<owner>/<repo>/${parsed.number}.`,
-				);
-			}
-		}
 		try {
-			const lookup = await getOrFetchPr({
-				cwd,
-				repo,
-				number: parsed.number,
+			const provider = providerFromSettings(settingsFromContext(context));
+			const cwd = resolveCwd(context);
+			let repo = parsed.repo;
+			if (!repo) {
+				repo = await provider.resolveDefaultRepo(cwd, context?.signal);
+			}
+			const lookup = await provider.fetchPr(repo, parsed.number, {
 				includeComments: parsed.comments,
 				signal: context?.signal,
-				settings: settingsFromContext(context),
 			});
 			return buildSingleResource({
 				url,
